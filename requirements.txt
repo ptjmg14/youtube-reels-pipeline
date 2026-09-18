@@ -1,0 +1,3 @@
+# Complete and reproducible environment for local development and execution.
+# Install with: python -m pip install -r requirements.txt
+-e .[local,index,gemini,dev]

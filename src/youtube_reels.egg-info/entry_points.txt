@@ -1,0 +1,2 @@
+[console_scripts]
+reels = youtube_reels.cli:main

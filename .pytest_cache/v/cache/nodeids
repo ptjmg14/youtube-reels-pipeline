@@ -1,0 +1,15 @@
+[
+  "tests/test_analyzer.py::AnalyzerTests::test_gemini_json_shape",
+  "tests/test_analyzer.py::AnalyzerTests::test_heuristic_empty_transcript_gives_no_windows",
+  "tests/test_analyzer.py::AnalyzerTests::test_heuristic_returns_clip",
+  "tests/test_analyzer.py::AnalyzerTests::test_heuristic_windows_are_coherent",
+  "tests/test_analyzer.py::AnalyzerTests::test_parse_scripts_rejects_more_than_max_clips",
+  "tests/test_analyzer.py::AnalyzerTests::test_parse_scripts_selects_clip_with_timing_and_source_text",
+  "tests/test_dedupe.py::DedupeTests::test_jaccard_unrelated_text_is_low",
+  "tests/test_dedupe.py::DedupeTests::test_normalize_drops_punctuation_and_whitespace",
+  "tests/test_dedupe.py::DedupeTests::test_shingles_match_duplicated_text",
+  "tests/test_dedupe.py::DedupeTests::test_transcript_text_and_chunks",
+  "tests/test_pinecone_connection.py::test_pinecone_connection",
+  "tests/test_subtitles.py::SubtitleTests::test_vtt_to_segments_and_srt",
+  "tests/test_vectordb.py::VectorDbTests::test_embedding_adapter_retains_configuration"
+]

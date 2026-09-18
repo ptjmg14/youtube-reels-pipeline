@@ -1,0 +1,21 @@
+Metadata-Version: 2.4
+Name: youtube-reels
+Version: 0.1.0
+Summary: Local-first YouTube to vertical short-video pipeline
+Requires-Python: <3.15,>=3.11
+Requires-Dist: yt-dlp>=2025.1.15
+Requires-Dist: python-dotenv>=1.0.1
+Requires-Dist: imageio-ffmpeg>=0.6.0
+Provides-Extra: local
+Requires-Dist: faster-whisper>=1.1.1; extra == "local"
+Requires-Dist: edge-tts>=6.1.0; extra == "local"
+Requires-Dist: matplotlib>=3.9.0; extra == "local"
+Provides-Extra: index
+Requires-Dist: chromadb<2.0.0,>=1.5.0; extra == "index"
+Provides-Extra: pinecone
+Requires-Dist: pinecone>=10.0.0; extra == "pinecone"
+Provides-Extra: gemini
+Requires-Dist: google-genai>=1.0.0; extra == "gemini"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.0; extra == "dev"
+Requires-Dist: ruff>=0.9.0; extra == "dev"
