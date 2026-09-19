@@ -43,9 +43,12 @@ class Evaluator:
     def _eval_prompt(self, script: RenderedScript) -> str:
         return f"""You are a content quality and legal compliance evaluator for a media company.
 Evaluate the following script based on these rules:
-1. PARAPHRASE: The narration must NOT copy the original source word-for-word. It must paraphrase the information.
+1. PARAPHRASE: The narration must NOT copy the original source text word-for-word. It must paraphrase the facts and ideas using completely different sentence structures and vocabulary.
 2. CITATION: The narration MUST begin with a source citation.
 3. CHART DATA: If the script includes a chart, ensure it is derived from the narration and not fake.
+
+Original Source Text:
+"{script.source_text}"
 
 Script to evaluate:
 Narration: "{script.narration}"
