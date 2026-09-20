@@ -23,21 +23,13 @@ Using the assignment source video (`https://www.youtube.com/watch?v=KjAI9r8tnOs`
 
 > [!TIP]
 > **Key Takeaway**: By combining local deterministic processing (Pillow, Matplotlib, FFmpeg, ONNX), free captions, and free-tier APIs (Groq, Gemini, edge-tts), **the operational cost per video is essentially $0.00 for demo and batch scales**, and less than **$0.001** if paying standard Gemini Flash tokens. This represents a **99.9% cost reduction** compared to naive cloud video generation pipelines.
+>
+> **When would I pay?** My preference is to default to free-tier and local processing at every step — and only introduce paid APIs where the quality gap is large enough to justify it so an hybrid approach. The one area where that threshold is clearly met is **video generation itself**: if the goal is toward maximising virality, free programmatic assembly with Pillow/FFmpeg hits a ceiling. Similarly, if volume or latency requirements outgrow free-tier quotas (Gemini: 20 req/day, Groq: 20 req/min), the first upgrade would be Gemini paid tokens (~\$0.001/video) — still orders of magnitude cheaper than a full cloud pipeline.
+
 
 ---
 
-## 2. Cost at Scale (Projections)
-
-| Monthly Volume | Naive Cloud Pipeline (OpenAI + ElevenLabs + HeyGen) | Our Optimized Pipeline (Free Tier / Hybrid) | Our Pipeline at Enterprise Scale (Paid APIs) |
-| :--- | :--- | :--- | :--- |
-| **10 videos / mo** | ~$17.10 | **$0.00** | ~$0.01 |
-| **100 videos / mo** | ~$171.00 | **$0.00** (within free tier quotas) | ~$0.10 |
-| **1,000 videos / mo**| ~$1,710.00 | ~$0.90 (minor Gemini API overflow) | ~$1.00 |
-| **10,000 videos / mo**| ~$17,100.00 | ~$9.50 (Gemini paid tier + cloud runner) | ~$10.00 |
-
----
-
-## 3. Detailed Cost-Control Mechanisms
+## 2. Detailed Cost-Control Mechanisms
 
 ### A. Two-Tier Deduplication
 - **YouTube Video ID Cache**: Instant check against the vector store before downloading the video. Avoids 100% of download and transcription compute for previously processed videos.
@@ -55,7 +47,7 @@ Using the assignment source video (`https://www.youtube.com/watch?v=KjAI9r8tnOs`
 
 ---
 
-## 4. Operational Requirements
+## 3. Operational Requirements
 
 1. **Mandatory**: A Gemini API key on Google AI Studio's **free tier** (zero credit card required).
 2. **Optional**: Groq API key for high-speed transcription (free tier, 20 requests/minute).

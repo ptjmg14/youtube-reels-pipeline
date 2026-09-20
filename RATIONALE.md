@@ -42,25 +42,4 @@ The source material is protected news/media content. The pipeline strictly compl
 
 ---
 
-## 3. Technology Choices & Justification
-
-| Step | Chosen Technology | Rationale | Alternatives Considered |
-| :--- | :--- | :--- | :--- |
-| **Media Ingestion** | `yt-dlp` + `imageio-ffmpeg` | Robust YouTube extraction; portable FFmpeg requires no system-wide installation. | PyTube (frequently breaks with YouTube changes), MoviePy (bloated). |
-| **Transcription** | VTT Captions → Groq Whisper → `faster-whisper` | Prioritizes free captions ($0); Groq is ultra-fast (~10s for 15 min); local Whisper guarantees offline capability. | OpenAI Whisper API ($0.006/min, paid), AssemblyAI. |
-| **LLM Rewriter** | Gemini 2.5 Flash (`google-genai` SDK) | Large context window, fast JSON structured outputs, generous free tier (20 req/day). | GPT-4o-mini (paid API), Claude 3.5 Haiku. |
-| **Guardrail Evaluator** | Gemini Flash (Multi-Turn loop) | Catches legal & quality defects before video generation with minimal token overhead. | Regex rules (too rigid), LangChain guardrails (heavyweight). |
-| **Chart Regeneration** | `matplotlib` | Programmatic, reproducible 1080px charts rendered from raw data tables. | Plotly (larger binary dependencies), QuickChart API (external dependency). |
-| **TTS Narration** | `edge-tts` (Microsoft Neural voices) | Keyless, free, natural neural voices across dozens of languages (Portuguese, English, Chinese, etc.). | ElevenLabs (expensive for batch tasks), gTTS (robotic quality). |
-| **Video Assembly** | Pillow + FFmpeg | 1080×1920 30fps vertical shorts with fade transitions at $0 cloud cost (`-preset veryfast`). | MoviePy (slow, high memory), Cloud Video APIs ($$$). |
-| **Vector DB / Index** | Pinecone + Local Chroma Mirror | Cloud Pinecone for global search; local Chroma/ONNX mirror allows 100% offline deduplication. | Weaviate, Qdrant, Milvus. |
-
----
-
-## 4. Internationalization and Modularity
-
-The pipeline features a dedicated localization layer ([`localization.py`](src/youtube_reels/localization.py)):
-- **Languages Supported**: Traditional Chinese, English, Portuguese, etc.
-- **Dynamic Adapters**: Visual cards, citations, and script length limits (words vs. characters) automatically adjust based on `REELS_OUTPUT_LANG`.
-
 
