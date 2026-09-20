@@ -52,7 +52,7 @@ The source material is protected news/media content. The pipeline strictly compl
 | **Guardrail Evaluator** | Gemini Flash (Multi-Turn loop) | Catches legal & quality defects before video generation with minimal token overhead. | Regex rules (too rigid), LangChain guardrails (heavyweight). |
 | **Chart Regeneration** | `matplotlib` | Programmatic, reproducible 1080px charts rendered from raw data tables. | Plotly (larger binary dependencies), QuickChart API (external dependency). |
 | **TTS Narration** | `edge-tts` (Microsoft Neural voices) | Keyless, free, natural neural voices across dozens of languages (Portuguese, English, Chinese, etc.). | ElevenLabs (expensive for batch tasks), gTTS (robotic quality). |
-| **Video Assembly** | Pillow + FFmpeg | 1080×1920 60fps vertical shorts with fade transitions, subtitles, and badges at 0 cloud cost. | MoviePy (slow, high memory), Cloud Video APIs ($$$). |
+| **Video Assembly** | Pillow + FFmpeg | 1080×1920 30fps vertical shorts with fade transitions at $0 cloud cost (`-preset veryfast`). | MoviePy (slow, high memory), Cloud Video APIs ($$$). |
 | **Vector DB / Index** | Pinecone + Local Chroma Mirror | Cloud Pinecone for global search; local Chroma/ONNX mirror allows 100% offline deduplication. | Weaviate, Qdrant, Milvus. |
 
 ---

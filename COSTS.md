@@ -12,7 +12,7 @@ Using the assignment source video (`https://www.youtube.com/watch?v=KjAI9r8tnOs`
 | :--- | :--- | :--- | :--- |
 | **1. Audio Extraction** | `yt-dlp` + portable FFmpeg (mono 64k) | **$0.00** (Local CPU) | $0.00 |
 | **2. Transcription** | YouTube Captions ($0) / Groq Whisper ($0 free tier) | **$0.00** (or ~$0.0001) | OpenAI Whisper API: $0.006/min × 15 = **$0.0900** |
-| **3. Pre-filtering** | Heuristic window packing (Python, zero LLM) | **$0.00** (Local CPU) | LLM Pre-pass (GPT-4o): ~$0.0200 |
+| **3. Pre-filtering** | Scored sliding-window heuristic (pure `re`, zero LLM) | **$0.00** (Local CPU) | LLM Pre-pass (GPT-4o): ~$0.0200 |
 | **4. LLM Rewriting** | Gemini 2.5 Flash (~3.5k input tokens, ~1k output) | **$0.00** (Free tier) or **$0.0007** | Claude 3.5 Sonnet / GPT-4o: **$0.0350** |
 | **5. Guardrail Evaluation** | Gemini 2.5 Flash (Targeted verification) | **$0.00** (Free tier) or **$0.0002** | Secondary LLM pass: **$0.0100** |
 | **6. Chart Generation** | Programmatic `matplotlib` (zero API) | **$0.00** (Local CPU) | QuickChart API / Plotly Cloud: ~$0.0050 |
@@ -44,13 +44,14 @@ Using the assignment source video (`https://www.youtube.com/watch?v=KjAI9r8tnOs`
 - **Transcript Semantic & N-Gram Check**: Embeds transcript windows and checks Jaccard n-gram similarity against already indexed material. Catches cross-channel re-uploads and reposts before any LLM rewrite or video rendering occurs.
 
 ### B. Heuristic Pre-Filtering
-- Rather than sending the full 15-minute transcript through multiple LLM passes to identify clip candidates, a local Python heuristic (`HeuristicPrefilter`) packs sentences into 15–55s candidate windows based on punctuation and timestamp continuity.
-- Gemini receives the candidate blocks in a single, structured prompt and only generates output for the `max_clips` specified.
+- Rather than dumping the raw transcript into an LLM, a local Python heuristic (`HeuristicPrefilter`) generates overlapping 15–55s windows with a **50 % step** (so no content at window boundaries is missed), then **scores** each window on five information-density signals: numeric density, contrast markers, question hooks, surprise/emotion language, and capitalised named-entity proxies — all via fast stdlib `re`, zero API cost.
+- Only the **top 30 windows by score** (configurable) are forwarded to Gemini in a single structured prompt. The LLM then selects and writes only the `max_clips` specified.
+- This two-stage approach (local scoring → single LLM pass) eliminates multi-pass LLM brainstorming while surfacing higher-quality candidates than a simple greedy packer.
 
 ### C. Programmatic Media Generation
 - **Charts**: Rendered cleanly in seconds with `matplotlib` directly from numbers extracted by the rewriter. Zero third-party image/chart API costs.
 - **TTS**: `edge-tts` provides human-grade Microsoft Azure Neural voice synthesis with zero API tokens or subscriptions.
-- **Composition**: FFmpeg composes vertical 1080×1920 clips with fade transitions locally on CPU in ~10 seconds per clip.
+- **Composition**: FFmpeg composes vertical 1080×1920 clips with fade transitions locally on CPU in ~5 seconds per clip (`-preset veryfast -crf 23`).
 
 ---
 
