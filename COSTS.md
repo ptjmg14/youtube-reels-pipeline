@@ -24,7 +24,7 @@ Using the assignment source video (`https://www.youtube.com/watch?v=KjAI9r8tnOs`
 > [!TIP]
 > **Key Takeaway**: By combining local deterministic processing (Pillow, Matplotlib, FFmpeg, ONNX), free captions, and free-tier APIs (Groq, Gemini, edge-tts), **the operational cost per video is essentially $0.00 for demo and batch scales**, and less than **$0.001** if paying standard Gemini Flash tokens. This represents a **99.9% cost reduction** compared to naive cloud video generation pipelines.
 >
-> **When would I pay?** My preference is to default to free-tier and local processing at every step — and only introduce paid APIs where the quality gap is large enough to justify it so an hybrid approach. The one area where that threshold is clearly met is **video generation itself**: if the goal is toward maximising virality, free programmatic assembly with Pillow/FFmpeg hits a ceiling. Similarly, if volume or latency requirements outgrow free-tier quotas.
+> **When would I pay?** My preference is to default to free-tier and local processing at every step — and only introduce paid APIs where the quality gap is large enough to justify it so an hybrid approach. The one area where that threshold is clearly met is **video generation itself**: if the goal is toward maximising virality, free programmatic assembly with Pillow/FFmpeg hits a ceiling. Similarly, if volume or latency requirements outgrow free-tier quotas. If over-time or after error analysis we deem LLM rewriting and guardrail evaluation to be sup-par we can also change to a better LLM without too much impact to cost.
 
 
 ---
