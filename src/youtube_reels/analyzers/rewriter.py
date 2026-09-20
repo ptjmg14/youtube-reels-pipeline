@@ -25,11 +25,21 @@ class Rewriter:
     only ever hand back structured data (never media) for chart regeneration.
     """
 
-    def __init__(self, api_key: str, model: str, source_name: str, language: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        source_name: str,
+        language: str,
+        groq_api_key: str | None = None,
+        groq_models: list[str] | None = None,
+    ) -> None:
         self.api_key = api_key
         self.model = model
         self.source_name = source_name
         self.language = language
+        self.groq_api_key = groq_api_key
+        self.groq_models = groq_models
 
     def rewrite(
         self, 
@@ -55,7 +65,11 @@ class Rewriter:
         )
         try:
             response_text = generate_with_fallback(
-                self.api_key, prompt, model=self.model
+                self.api_key,
+                prompt,
+                model=self.model,
+                groq_api_key=self.groq_api_key,
+                groq_models=self.groq_models,
             )
         except RuntimeError as error:
             raise RewriteError(str(error)) from error

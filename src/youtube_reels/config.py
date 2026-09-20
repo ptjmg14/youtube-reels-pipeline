@@ -18,6 +18,8 @@ class Settings:
     transcriber: str
     groq_api_key: str | None
     groq_model: str
+    llm_fallback: str
+    groq_rewrite_models: tuple[str, ...]
     vectordb_backend: str
     vectordb_backup: str
     dedupe_threshold: float
@@ -47,6 +49,13 @@ class Settings:
             transcriber=os.getenv("REELS_TRANSCRIBER", "auto").lower(),
             groq_api_key=os.getenv("GROQ_API_KEY"),
             groq_model=os.getenv("GROQ_MODEL", "whisper-large-v3-turbo"),
+            llm_fallback=os.getenv("REELS_LLM_FALLBACK", "groq").lower(),
+            groq_rewrite_models=_split_models(
+                os.getenv(
+                    "REELS_LLM_FALLBACK_MODELS",
+                    "llama-3.3-70b-versatile, openai/gpt-oss-120b, llama-3.1-8b-instant",
+                )
+            ),
             vectordb_backend=os.getenv("REELS_VECTORDB", "pinecone").lower(),
             vectordb_backup=os.getenv("REELS_VECTORDB_BACKUP", "chroma").lower(),
             dedupe_threshold=float(os.getenv("REELS_DEDUPE_THRESHOLD", "0.7")),
@@ -66,3 +75,11 @@ class Settings:
         path = self.data_dir / "videos" / video_id
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+
+def _split_models(raw: str) -> tuple[str, ...]:
+    return tuple(
+        model.strip()
+        for model in raw.split(",")
+        if model.strip()
+    )

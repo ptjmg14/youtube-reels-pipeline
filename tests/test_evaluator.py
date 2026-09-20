@@ -25,11 +25,13 @@ class EvaluatorTests(unittest.TestCase):
             end=30.0,
             source_text="O PIB cresceu 3% este ano de acordo com os dados.",
         )
-        prompt = self.evaluator._eval_prompt(script)
+        prompt = self.evaluator._eval_prompt(script, "Canal")
         self.assertIn("Target Language: pt", prompt)
         self.assertIn("Original Source Text:", prompt)
         self.assertIn("grounded in the Original Source Text", prompt)
         self.assertIn("NOT required to recite every single data point", prompt)
+        self.assertIn("Official Source Name:", prompt)
+        self.assertIn('"Canal"', prompt)
 
     def test_parse_evaluation_variations(self) -> None:
         # Standard PASS

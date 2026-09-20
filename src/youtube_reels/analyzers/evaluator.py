@@ -16,10 +16,19 @@ class EvalError(RuntimeError):
 class Evaluator:
     """Evaluates generated scripts to ensure they meet quality and copyright standards."""
 
-    def __init__(self, api_key: str, model: str, language: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        language: str,
+        groq_api_key: str | None = None,
+        groq_models: list[str] | None = None,
+    ) -> None:
         self.api_key = api_key
         self.model = model
         self.language = language
+        self.groq_api_key = groq_api_key
+        self.groq_models = groq_models
 
     def evaluate(self, script: RenderedScript, source_name: str) -> bool:
         """Evaluates a script. Returns True if passed, raises EvalError if failed."""
@@ -29,7 +38,11 @@ class Evaluator:
 
         try:
             response_text = generate_with_fallback(
-                self.api_key, prompt, model=self.model
+                self.api_key,
+                prompt,
+                model=self.model,
+                groq_api_key=self.groq_api_key,
+                groq_models=self.groq_models,
             )
         except RuntimeError as error:
             raise EvalError(str(error)) from error

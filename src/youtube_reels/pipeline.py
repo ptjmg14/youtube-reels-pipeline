@@ -133,6 +133,7 @@ def _rewrite(
         model=settings.gemini_model,
         source_name=_effective_source_name(asset, settings),
         language=settings.output_language,
+        **_groq_fallback(settings),
     )
     try:
         scripts = rewritter.rewrite(windows, asset.title, max_clips)
@@ -163,12 +164,14 @@ def _evaluate(
         api_key=settings.gemini_api_key,
         model=settings.gemini_model,
         language=settings.output_language,
+        **_groq_fallback(settings),
     )
     rewriter = Rewriter(
         api_key=settings.gemini_api_key,
         model=settings.gemini_model,
         source_name=effective_source,
         language=settings.output_language,
+        **_groq_fallback(settings),
     )
 
     final_scripts: list[RenderedScript] = []
@@ -241,6 +244,16 @@ def _evaluate(
         )
 
     return final_scripts
+
+
+def _groq_fallback(settings: Settings) -> dict[str, object]:
+    """Kwargs for Rewriter/Evaluator enabling the Groq fallback when enabled."""
+    if settings.llm_fallback != "groq" or not settings.groq_api_key:
+        return {}
+    return {
+        "groq_api_key": settings.groq_api_key,
+        "groq_models": list(settings.groq_rewrite_models),
+    }
 
 
 def _effective_source_name(asset: VideoAsset, settings: Settings) -> str:

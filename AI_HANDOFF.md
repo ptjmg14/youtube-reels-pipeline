@@ -68,7 +68,9 @@ It is not necessary to install FFmpeg globally: `imageio-ffmpeg` provides a port
 | --- | --- | --- |
 | `GEMINI_API_KEY` | — | Required for rewrite + guardrail (mandatory) |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Model for rewrite/evaluator |
-| `GROQ_API_KEY` | — | Fast transcription if present |
+| `GROQ_API_KEY` | — | Fast transcription if present; also enables the LLM fallback |
+| `REELS_LLM_FALLBACK` | `groq` | `groq` = retry rewrite/eval on Groq free tier after Gemini quota (429); `off` disables it |
+| `REELS_LLM_FALLBACK_MODELS` | comma list | Groq models tried in order (quality → larger daily quota) |
 | `REELS_SOURCE_NAME` | auto (YouTube channel) | Manual override for the mandatory citation source; unset auto-detects from the video's channel |
 | `REELS_OUTPUT_LANG` | `繁體中文` | Script/narration language |
 | `REELS_TTS_VOICE` | `zh-TW-HsiaoYuNeural` | edge-tts voice |
@@ -91,7 +93,7 @@ It is not necessary to install FFmpeg globally: `imageio-ffmpeg` provides a port
 | `dedupe.py` | `normalize`, `shingles`, `jaccard`, `transcript_chunks` |
 | `vectordb.py` | `VectorStore`, `MirroredStore`, `open_vector_store`, `find_similar` |
 | `pinecone_store.py` | `PineconeStore` with server-side Pinecone embeddings |
-| `llm_utils.py` | `generate_with_fallback` — model fallback + retry (429/404/503) |
+| `llm_utils.py` | `generate_with_fallback` — model fallback + retry (429/404/503), then Groq free-tier fallback |
 | `assembler.py` + `tts.py` | Cards/charts + edge-tts + FFmpeg 9:16 assembly |
 | `models.py` | Domain models (`VideoAsset`, `TranscriptSegment`, `RenderedScript`, `SimilarVideo`, `ChartSpec`) |
 
@@ -114,6 +116,16 @@ clips/NN-<title>.mp4 (1080×1920, ~22–45s, TTS narration + charts)
 - **`gemini-2.0-flash` was retired (404)** — do not add it back to the list.
 - Free tier = 20 requests/day per model. When quota is exhausted (429), the pipeline jumps to the next model; 503 (high demand) is retried with backoff (3 rounds × 20s).
 - `_retryable()` decides fallback for 429/404/quota; other ClientErrors (e.g., invalid key) propagate as clean `RewriteError`/`EvalError` → `ProcessError` on the CLI.
+
+## Groq Fallback (when the Gemini daily quota runs out)
+
+- After Gemini models fail, `generate_with_fallback` retries the same prompt on Groq free-tier chat models via `httpx` (OpenAI-compatible `chat/completions`, `response_format: json_object`).
+- **Quota short-circuit:** if every Gemini candidate in a round fails only with quota/retired-model errors (429/404), the remaining retry rounds and the 20s backoffs are skipped and the call jumps straight to Groq. The full 3-round × 20s backoff is kept only for transient 503 server errors.
+- Enabled by `REELS_LLM_FALLBACK=groq` (default) and `GROQ_API_KEY`; otherwise the original `RuntimeError` is raised.
+- Default model order (`REELS_LLM_FALLBACK_MODELS`): `llama-3.3-70b-versatile` (best quality) → `openai/gpt-oss-120b` → `llama-3.1-8b-instant` (largest daily quota). Groq quotas are **per model**, so trying several models multiplies the remaining daily budget.
+- Groq `429`/HTTP errors just log and try the next model; if every fallback fails, the pipeline raises the same `ProcessError` describing the exhausted models.
+- No new dependency was added beyond `httpx` (already a transitive dep of the index/gemini extras, now declared directly).
+- The guardrail (also on the fallback chain) still filters out the quality regressions of the weaker Groq models.
 
 ## Confirmed State
 
