@@ -12,7 +12,8 @@ YouTube URL
   → 2. Transcription  YouTube captions OR Groq Whisper (free, ~200x
                       faster) OR local faster-whisper as fallback   ~$0.0001
   → 3. Pre-filter     heuristic window packing 15–55s               cost $0
-  → 4. Rewrite        Gemini free tier → original scripts + citation
+  → 4. Rewrite        Gemini free tier (Groq fallback when quota
+                      exhausted) → original scripts + citation
                       "According to <source>..." + chart data (JSON)  ~$0.0001
   → 5. Charts         matplotlib regenerates each chart from data   cost $0
   → 6. Speech         edge-tts (keyless, high-quality, free)         cost $0
@@ -27,7 +28,7 @@ YouTube URL
 | --- | --- | --- |
 | **Audio** | Portable FFmpeg (`imageio-ffmpeg`) | No need to install system-level binaries |
 | **Transcription** | YouTube Captions FIRST; then Groq Whisper `whisper-large-v3-turbo` (free tier); local whisper as fallback | Captions are free; Groq is free and ~200× faster than local CPU whisper |
-| **Rewrite** | Gemini `gemini-2.5-flash` (free tier with fallbacks) | Multimodal, extremely cheap/free, highly structured JSON output |
+| **Rewrite** | Gemini `gemini-2.5-flash` (free tier, with Groq free-tier fallback) | Multimodal, extremely cheap/free, highly structured JSON output; Groq free-tier fallback when Gemini daily quota is exhausted |
 | **Charts** | `matplotlib` | Programmatically regenerates from structured data — never takes screenshots |
 | **Speech** | `edge-tts` | Free, keyless, high quality |
 | **Video** | FFmpeg (card-composition + audio muxing) | No original video footage used — ensures 100% original content |
@@ -84,7 +85,9 @@ Key environment variables (all optional except the key):
 | `REELS_EMBEDDING` | `local` | `local` (ONNX, $0) or `gemini` (Gemini embeddings API) |
 | `WHISPER_MODEL` | `base` | Local whisper model (offline fallback) |
 | `REELS_TRANSCRIBER` | `auto` | `auto`/`groq` → uses Groq when API key is present; `local` forces local whisper |
-| `GROQ_API_KEY` | — | Groq free tier key for high-speed transcription |
+| `REELS_LLM_FALLBACK` | `groq` | `groq` = retry rewrite/guardrail on Groq free tier after Gemini quota (429); `off` disables it |
+| `REELS_LLM_FALLBACK_MODELS` | comma-separated list | Groq models tried in order: quality first, larger daily quota last |
+| `GROQ_API_KEY` | — | Groq free tier key for high-speed transcription; also enables the free-tier LLM fallback (rewrite/guardrail) when Gemini quota is exhausted |
 | `REELS_VECTORDB` | `pinecone` | `pinecone` (primary) or `chroma` (local only) |
 | `REELS_VECTORDB_BACKUP` | `chroma` | Local backup mirror; `none` disables |
 | `PINECONE_API_KEY` | — | Pinecone API key (server-side `multilingual-e5-large` embeddings) |
