@@ -57,9 +57,27 @@ def download(url: str, settings: Settings) -> VideoAsset:
         subtitle = next(iter(sorted(output_dir.glob("original*.vtt"))), None)
     elif subtitle is None:
         subtitle = _fetch_subtitles_only(output_dir, info)
+    source_name = _channel_name(info)
     if not audio.exists():
         _extract_audio(source, audio)
-    return VideoAsset(video_id, str(info.get("title", video_id)), url, audio, None, subtitle)
+    return VideoAsset(
+        video_id,
+        str(info.get("title", video_id)),
+        url,
+        audio,
+        None,
+        subtitle,
+        source_name,
+    )
+
+
+def _channel_name(info: dict) -> str | None:
+    """Best-effort display name of the source channel, used for citation."""
+    for key in ("channel", "uploader", "creator", "channel_id"):
+        value = info.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 def _subtitle_options(output_dir: Path) -> dict:

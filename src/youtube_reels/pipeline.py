@@ -14,6 +14,7 @@ from .analyzers.rewriter import RewriteError, Rewriter
 from .assembler import assemble_short
 from .config import Settings
 from .downloader import download, probe_video_id
+from .localization import citation_text, fallback_source_name
 
 if TYPE_CHECKING:
     from .pinecone_store import PineconeStore
@@ -104,7 +105,14 @@ def process(
                 settings.tts_voice,
                 settings.tts_rate,
             )
-            output_paths.append(assemble_short(clips_dir, script, narration))
+            output_paths.append(
+                assemble_short(
+                    clips_dir,
+                    script,
+                    narration,
+                    language=settings.output_language,
+                )
+            )
 
     with _timed("ChromaDB indexing (transcript + scripts)"):
         if store:
@@ -123,17 +131,22 @@ def _rewrite(
     rewritter = Rewriter(
         api_key=settings.gemini_api_key,
         model=settings.gemini_model,
-        source_name=settings.source_name,
+        source_name=_effective_source_name(asset, settings),
         language=settings.output_language,
     )
     try:
         scripts = rewritter.rewrite(windows, asset.title, max_clips)
     except RewriteError as error:
         raise ProcessError(str(error)) from error
-    default_citation = _citation_text(settings.output_language, settings.source_name)
+    default_citation = citation_text(
+        settings.output_language, _effective_source_name(asset, settings)
+    )
     return [
         replace(script, citation=script.citation or default_citation) for script in scripts
     ]
+
+
+MAX_EVAL_ATTEMPTS = 3
 
 
 def _evaluate(
@@ -144,7 +157,8 @@ def _evaluate(
 ) -> list[RenderedScript]:
     if not settings.gemini_api_key:
         raise ProcessError("Evaluation requires GEMINI_API_KEY.")
-    
+
+    effective_source = _effective_source_name(asset, settings)
     evaluator = Evaluator(
         api_key=settings.gemini_api_key,
         model=settings.gemini_model,
@@ -153,54 +167,94 @@ def _evaluate(
     rewriter = Rewriter(
         api_key=settings.gemini_api_key,
         model=settings.gemini_model,
-        source_name=settings.source_name,
+        source_name=effective_source,
         language=settings.output_language,
     )
-    
-    final_scripts = []
-    
+
+    final_scripts: list[RenderedScript] = []
+    last_eval_error: Exception | None = None
+
     for i, script in enumerate(scripts):
         success = False
-        attempts = 0
         current_script = script
-        
-        while not success and attempts < 2:
+        last_error: Exception | None = None
+
+        for attempt in range(1, MAX_EVAL_ATTEMPTS + 1):
+            if attempt > 1:
+                logger.info(
+                    f"Refining script {script.number} with evaluator feedback (attempt {attempt}/{MAX_EVAL_ATTEMPTS})..."
+                )
+                if current_script.source_text:
+                    source = SegmentWindow(
+                        start=current_script.start or 0.0,
+                        end=current_script.end or 0.0,
+                        text=current_script.source_text,
+                    )
+                else:
+                    source = windows[i] if i < len(windows) else SegmentWindow(0.0, 0.0, "")
+
+                try:
+                    new_scripts = rewriter.rewrite(
+                        [source],
+                        asset.title,
+                        1,
+                        feedback=str(last_error),
+                        previous_script=current_script.narration,
+                    )
+                    if not new_scripts:
+                        raise RewriteError("Rewriter returned no script on retry.")
+                    # Keep original clip number and timing bounds, but accept new narration, citation & chart
+                    current_script = replace(
+                        new_scripts[0],
+                        number=script.number,
+                        start=current_script.start,
+                        end=current_script.end,
+                        source_text=current_script.source_text,
+                    )
+                except RewriteError as err:
+                    logger.warning(f"Script {script.number} rewrite retry failed: {err}")
+                    last_error = err
+                    continue
+
             try:
                 evaluator.evaluate(current_script)
                 success = True
+                logger.info(f"Script {script.number} passed guardrail evaluation on attempt {attempt}.")
+                break
             except EvalError as error:
-                attempts += 1
-                logger.warning(f"Script {i+1} failed evaluation (attempt {attempts}/2): {error}")
-                if script.source_text:
-                    source = SegmentWindow(
-                        start=script.start or 0.0,
-                        end=script.end or 0.0,
-                        text=script.source_text,
-                    )
-                else:
-                    source = windows[i]
-                new_scripts = rewriter.rewrite([source], asset.title, 1)
-                current_script = replace(
-                    new_scripts[0],
-                    citation=script.citation,
-                    start=script.start,
-                    end=script.end,
-                    source_text=script.source_text,
+                last_error = error
+                last_eval_error = error
+                logger.warning(
+                    f"Script {script.number} failed evaluation (attempt {attempt}/{MAX_EVAL_ATTEMPTS}): {error}"
                 )
-        
+
         if success:
             final_scripts.append(current_script)
         else:
-            raise ProcessError(f"Script {i+1} failed evaluation after 2 retries.")
-            
+            logger.error(
+                f"Script {script.number} failed evaluation after {MAX_EVAL_ATTEMPTS} attempts and was skipped: {last_error}"
+            )
+
+    if not final_scripts:
+        raise ProcessError(
+            f"All {len(scripts)} scripts failed quality guardrail evaluation: {last_eval_error}"
+        )
+
     return final_scripts
 
 
-def _citation_text(language: str, source_name: str) -> str:
-    language = (language or "").lower()
-    if any(marker in language for marker in ("english", "en", "英语", "英文")):
-        return f"According to {source_name}'s reporting"
-    return f"根據 {source_name} 報導"
+def _effective_source_name(asset: VideoAsset, settings: Settings) -> str:
+    """Resolve the source credited in citations.
+
+    The channel actually hosting the video is preferred, so any YouTube URL is
+    handled generically; ``REELS_SOURCE_NAME`` is only a manual override, and a
+    neutral fallback is used when neither is available.
+    """
+    return (
+        (settings.source_name or "").strip()
+        or (asset.source_name or "").strip()
+        or fallback_source_name(settings.output_language)
+    )
 
 
 def _get_transcript(

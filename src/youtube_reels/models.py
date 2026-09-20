@@ -22,6 +22,7 @@ class VideoAsset:
     audio_path: Path
     video_path: Path | None = None
     subtitle_path: Path | None = None
+    source_name: str | None = None
 
 
 @dataclass(frozen=True)

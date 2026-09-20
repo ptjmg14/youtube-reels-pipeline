@@ -24,28 +24,33 @@ class Evaluator:
     def evaluate(self, script: RenderedScript) -> bool:
         """Evaluates a script. Returns True if passed, raises EvalError if failed."""
         from ..llm_utils import generate_with_fallback
-        
+
         prompt = self._eval_prompt(script)
-        
+
         try:
             response_text = generate_with_fallback(
                 self.api_key, prompt, model=self.model
             )
         except RuntimeError as error:
             raise EvalError(str(error)) from error
-        
+
         result = self._parse_evaluation(response_text)
-        if result.get("status") == "PASS":
+        status = str(result.get("status", "")).strip().upper()
+        if status == "PASS":
             return True
-        else:
-            raise EvalError(f"Evaluation failed: {result.get('reason', 'Unknown reason')}")
+
+        reason = result.get("reason") or "Quality evaluation failed"
+        raise EvalError(f"Evaluation failed: {reason}")
 
     def _eval_prompt(self, script: RenderedScript) -> str:
+        chart_str = json.dumps(script.chart.to_dict()) if script.chart else "None"
         return f"""You are a content quality and legal compliance evaluator for a media company.
+Target Language: {self.language}
+
 Evaluate the following script based on these rules:
-1. PARAPHRASE: The narration must NOT copy the original source text word-for-word. It must paraphrase the facts and ideas using completely different sentence structures and vocabulary.
-2. CITATION: The narration MUST begin with a source citation.
-3. CHART DATA: If the script includes a chart, ensure it is derived from the narration and not fake.
+1. PARAPHRASE: The narration must NOT copy the original source text verbatim. It must explain the information with original sentence structure and phrasing. Specific facts, proper names, entities, numbers, percentages, and dates SHOULD be accurately preserved.
+2. CITATION: The narration MUST begin with a clear attribution/credit to the source (e.g., in {self.language}).
+3. CHART DATA: If the script includes a chart, ensure its categories and numbers are factually grounded in the Original Source Text (not invented). The narration itself is brief and is NOT required to recite every single data point from the chart.
 
 Original Source Text:
 "{script.source_text}"
@@ -53,18 +58,25 @@ Original Source Text:
 Script to evaluate:
 Narration: "{script.narration}"
 Citation: "{script.citation}"
-Chart: {json.dumps(script.chart.to_dict()) if script.chart else "None"}
+Chart: {chart_str}
 
 Reply STRICTLY in JSON:
 {{
   "status": "PASS" or "FAIL",
-  "reason": "Why it failed, or 'None' if passed"
+  "reason": "Clear explanation of what failed, or 'None' if passed"
 }}
 """
 
     def _parse_evaluation(self, raw: str) -> dict[str, Any]:
-        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        cleaned = raw.strip()
+        if "```json" in cleaned:
+            cleaned = cleaned.split("```json", 1)[1]
+            cleaned = cleaned.split("```", 1)[0]
+        elif "```" in cleaned:
+            cleaned = cleaned.split("```", 1)[1]
+            cleaned = cleaned.split("```", 1)[0]
+        cleaned = cleaned.strip()
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError as error:
-            raise EvalError(f"Evaluation response is not valid JSON: {error}")
+            raise EvalError(f"Evaluation response is not valid JSON: {error} (raw: {raw[:200]})") from error

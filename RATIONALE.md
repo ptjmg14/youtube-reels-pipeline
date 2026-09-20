@@ -1,47 +1,66 @@
-# RATIONALE.md
+# Architectural Decisions and Design Rationale
 
-## Why use a Hybrid Deduplication Mechanism?
+This document explains the technical architecture, tool choices, and cost-control strategies implemented for the **Automated Rewrite Workflow for Video Content**, specifically addressing the key evaluation criteria.
 
-The pipeline employs a two-tier deduplication strategy to ensure maximum efficiency and content integrity:
+---
 
-1.  **YouTube Video ID Check (Primary):** This is the fastest check. If the specific ID has already been indexed, the pipeline skips processing immediately to save costs and time.
-2.  **Semantic Content Similarity (Secondary):** Even if the Video ID is different (e.g., re-uploads, different channels sharing the same content), the pipeline performs a **semantic recall** followed by an **n-gram Jaccard similarity** check. This prevents processing the same core information multiple times, even when presented via different URLs.
+## 1. What Matters Most: Cost Awareness & Resource Optimization
 
-**Why this approach was chosen:**
-- **Stability:** Video ID provides a permanent anchor for specific uploads.
-- **Robustness:** Semantic similarity (using shingles and embeddings) catches "re-skinned" content that a simple ID check would miss.
-- **Cost Efficiency:** By downloading the transcript first, we can perform a high-fidelity check before the most expensive steps (Gemini Rewriting and Video Assembly).
+The primary engineering focus of this pipeline is to minimize token usage, latency, and unnecessary compute while maintaining high output quality.
 
-## Architecture: Hybrid Vector Storage
+### Q1: For transcription, do you preprocess a long video to cut costs, or just feed the whole thing in as-is?
+- **Zero-Cost First Pass (YouTube Captions)**: Before extracting or transcribing audio, the downloader probes for existing human or auto-generated `.vtt` subtitles. If found, transcription cost is **$0.00** and execution time is near-instant (<1s).
+- **Audio Preprocessing & Downsampling**: When transcription is necessary, we do not feed raw video or uncompressed audio. FFmpeg extracts a **mono 64 kbps MP3** stream. This reduces file size by ~90% compared to typical video audio, drastically reducing upload bandwidth, latency, and token/file payload limits.
+- **Fast-tier vs. Local Fallback**: We utilize Groq's hosted `whisper-large-v3-turbo` on its free tier (~200x faster than local CPU Whisper, $0 API cost), seamlessly falling back to offline `faster-whisper` (int8 quantized, local CPU) if offline or unkeyed.
 
-The project implements a **Mirrored Vector Store** architecture:
-- **Pinecone (Cloud):** Acts as the primary global index for distributed access.
-- **ChromaDB (Local):** Acts as a high-performance local cache and backup. 
-- If the cloud provider is unreachable, the system automatically falls back to the local mirror, ensuring that deduplication and search features remain "always-on."
+### Q2: Script-breakdown and video generation are usually the most expensive steps — do you filter or make a judgment call before sending things through?
+- **Scored Sliding-Window Pre-filter (`HeuristicPrefilter`)**: We do **not** feed a raw transcript dump into the LLM. Instead, a local Python heuristic (pure stdlib `re`, **$0 cost**) runs three passes before any API call:
+  1. **Overlapping window generation** — a 50 % step sliding window replaces the old greedy non-overlapping packer, so content at window boundaries is never silently dropped.
+  2. **Information-density scoring** — each window is scored on five regex signals: numeric density (numbers, percentages, CJK numerals), contrast markers (*but / 但是 / porém*), question hooks (*how / 為什麼 / como*), surprise/emotion markers (*暴增 / shocking / !*), and capitalised named-entity proxies. Higher scores indicate more quotable, engaging moments.
+  3. **Top-N ranking with chronological restore** — only the top 30 windows (configurable) by score are forwarded to Gemini, keeping the rewrite prompt compact. The filtered set is then re-sorted chronologically so the narrative context reads naturally.
+- **Selective Moment Picking**: The Gemini Rewriter is presented with numbered window candidates in a single prompt and selects only the top `max_clips` (default 3) most engaging moments, generating concise scripts only for those selected moments.
+- **Multi-Turn Guardrail Validation**: Before generating audio or assembling video, an `Evaluator` verifies copyright compliance, paraphrase uniqueness, and factual chart grounding. If an issue is found, a targeted revision loop refines the script. This prevents wasting downstream resources (TTS synthesis and video composition) on flawed scripts.
+- **Zero-Cost Programmatic Video Assembly**: Rather than using expensive cloud generative video APIs (e.g. Runway, Sora, HeyGen at $0.20–$2.00 per minute), the pipeline programmatically renders high-resolution 1080×1920 vertical video using Pillow (text cards), Matplotlib (charts), and FFmpeg. This delivers 100% original, copyright-clean video at **$0 rendering cost**.
 
-## Language & Global Support
+### Q3: Do you have anything in place to stop the same video from being processed twice and racking up unnecessary cost?
+Yes, a **two-tier deduplication engine**:
+1. **Tier 1 — YouTube Video ID Cache (Fast Path)**: The video ID is probed before downloading media. If the vector index (Pinecone or Chroma) already contains this ID, processing halts immediately (`AlreadyProcessed`), taking <1 second and costing **$0**.
+2. **Tier 2 — Semantic & N-Gram Transcript Deduplication (Content Path)**: If a video is re-uploaded by another channel or under a different URL, an ID check alone would fail. After transcription, the pipeline performs:
+   - **Semantic vector recall** against indexed segments to identify candidate matches.
+   - **N-gram Jaccard similarity confirmation** on normalized text.
+   If similarity exceeds `REELS_DEDUPE_THRESHOLD` (default 0.7), execution halts with `DuplicateContent`, preventing redundant LLM rewriting and video rendering.
 
-- **Codebase:** All core logic, documentation, and configuration are in English to maintain professional standards and compatibility.
-- **Output:** The pipeline supports multi-language output (currently optimized for Traditional Chinese and English), adapting to the source material's context.
-- **Embeddings:** Uses local ONNX-based models (`all-MiniLM-L6-v2`) by default, providing a free, fast, and privacy-focused way to handle vectorizations without external API calls.
+---
 
-## Reliability: Automated Evaluation Guardrails
+## 2. Mandatory Copyright & Legal Compliance
 
-Unlike simple scripts, this pipeline includes a **Guardrail Evaluation** phase:
-- After Gemini generates a script, an **Evaluator** (also powered by LLM) checks for quality, structure, and adherence to constraints.
-- If a script fails evaluation, the system automatically attempts a **surgical rewrite**, significantly reducing "hallucinations" or malformed JSON outputs in the final video.
+The source material is protected news/media content. The pipeline strictly complies with copyright and journalistic requirements:
+1. **Verbatim Prevention & Paraphrase**: The prompt enforces complete rewording and restructuring of facts. The Evaluator guardrail checks that sentence structures differ substantially while preserving factual entities, dates, and numbers.
+2. **Source Attribution**: Every clip begins with an explicit verbal and visual citation (e.g., *"According to [Channel]'s reporting..."* or *"Segundo apurado por [Canal]..."*), dynamically resolved from the video channel metadata.
+3. **Programmatic Chart Regeneration**: When numerical or statistical data is present, data points are extracted into structured JSON and plotted from scratch using `matplotlib`. Screenshots or clips of original footage are never used.
+4. **Zero Footage Muxing**: No original video frames or audio streams are included in the output shorts.
 
-## Tool Choices (Rationale)
+---
 
-- **yt-dlp + FFmpeg**: Industry standard for reliable media extraction.
-- **Hybrid Transcription**: Prioritizes free VTT captions when available, falling back to **Groq Whisper** (for speed) or **local faster-whisper** (for privacy/offline).
-- **Gemini Flash**: Chosen for its high context window and superior reasoning in the "free tier" category.
-- **edge-tts**: High-quality neural voices without the cost of paid APIs like ElevenLabs.
-- **Matplotlib**: Used to programmatically regenerate charts from raw data, ensuring visual consistency and preventing "blurry screenshot" issues.
+## 3. Technology Choices & Justification
 
-## Compliance & Standards
+| Step | Chosen Technology | Rationale | Alternatives Considered |
+| :--- | :--- | :--- | :--- |
+| **Media Ingestion** | `yt-dlp` + `imageio-ffmpeg` | Robust YouTube extraction; portable FFmpeg requires no system-wide installation. | PyTube (frequently breaks with YouTube changes), MoviePy (bloated). |
+| **Transcription** | VTT Captions → Groq Whisper → `faster-whisper` | Prioritizes free captions ($0); Groq is ultra-fast (~10s for 15 min); local Whisper guarantees offline capability. | OpenAI Whisper API ($0.006/min, paid), AssemblyAI. |
+| **LLM Rewriter** | Gemini 2.5 Flash (`google-genai` SDK) | Large context window, fast JSON structured outputs, generous free tier (20 req/day). | GPT-4o-mini (paid API), Claude 3.5 Haiku. |
+| **Guardrail Evaluator** | Gemini Flash (Multi-Turn loop) | Catches legal & quality defects before video generation with minimal token overhead. | Regex rules (too rigid), LangChain guardrails (heavyweight). |
+| **Chart Regeneration** | `matplotlib` | Programmatic, reproducible 1080px charts rendered from raw data tables. | Plotly (larger binary dependencies), QuickChart API (external dependency). |
+| **TTS Narration** | `edge-tts` (Microsoft Neural voices) | Keyless, free, natural neural voices across dozens of languages (Portuguese, English, Chinese, etc.). | ElevenLabs (expensive for batch tasks), gTTS (robotic quality). |
+| **Video Assembly** | Pillow + FFmpeg | 1080×1920 60fps vertical shorts with fade transitions, subtitles, and badges at 0 cloud cost. | MoviePy (slow, high memory), Cloud Video APIs ($$$). |
+| **Vector DB / Index** | Pinecone + Local Chroma Mirror | Cloud Pinecone for global search; local Chroma/ONNX mirror allows 100% offline deduplication. | Weaviate, Qdrant, Milvus. |
 
-- **Strict Attribution:** Every generated clip includes a mandatory citation of the source material.
-- **Non-Derivative Rewriting:** The LLM is prompted to restructure and reword content to ensure the final product is a "new work" rather than a simple copy.
-- **Ephemeral Storage:** All intermediate artifacts (audio chunks, frames) are managed within a structured output directory for easy cleanup.
+---
+
+## 4. Internationalization and Modularity
+
+The pipeline features a dedicated localization layer ([`localization.py`](src/youtube_reels/localization.py)):
+- **Languages Supported**: Traditional Chinese, English, Portuguese, etc.
+- **Dynamic Adapters**: Visual cards, citations, and script length limits (words vs. characters) automatically adjust based on `REELS_OUTPUT_LANG`.
+
 

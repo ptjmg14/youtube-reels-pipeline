@@ -1,6 +1,1 @@
-{
-  "tests/test_analyzer.py::AnalyzerTests": true,
-  "tests/test_dedupe.py::DedupeTests": true,
-  "tests/test_subtitles.py::SubtitleTests": true,
-  "tests/test_vectordb.py::VectorDbTests": true
-}
+{}

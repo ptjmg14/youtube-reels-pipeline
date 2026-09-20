@@ -56,7 +56,7 @@ class Settings:
             pinecone_embedding_model=os.getenv(
                 "PINECONE_EMBEDDING_MODEL", "multilingual-e5-large"
             ),
-            source_name=os.getenv("REELS_SOURCE_NAME", "HEALTH 2.0"),
+            source_name=os.getenv("REELS_SOURCE_NAME", "").strip(),
             output_language=os.getenv("REELS_OUTPUT_LANG", "繁體中文"),
             tts_voice=os.getenv("REELS_TTS_VOICE", "zh-TW-HsiaoYuNeural"),
             tts_rate=os.getenv("REELS_TTS_RATE", "+5%"),

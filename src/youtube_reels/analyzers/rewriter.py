@@ -4,6 +4,7 @@ import json
 import logging
 from typing import Any
 
+from ..localization import citation_text, script_length_guideline
 from ..models import ChartSpec, RenderedScript, SegmentWindow
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,12 @@ class Rewriter:
         self.language = language
 
     def rewrite(
-        self, windows: list[SegmentWindow], source_title: str, max_clips: int
+        self, 
+        windows: list[SegmentWindow], 
+        source_title: str, 
+        max_clips: int,
+        feedback: str | None = None,
+        previous_script: str | None = None,
     ) -> list[RenderedScript]:
         if not windows:
             return []
@@ -39,7 +45,13 @@ class Rewriter:
         from ..llm_utils import generate_with_fallback
 
         prompt = _rewrite_prompt(
-            windows, source_title, self.source_name, self.language, max_clips
+            windows,
+            source_title,
+            self.source_name,
+            self.language,
+            max_clips,
+            feedback,
+            previous_script,
         )
         try:
             response_text = generate_with_fallback(
@@ -59,14 +71,29 @@ def _rewrite_prompt(
     source_name: str,
     language: str,
     max_clips: int,
+    feedback: str | None = None,
+    previous_script: str | None = None,
 ) -> str:
     excerpts = "\n".join(
         f"{index}. [{window.start:.1f}s–{window.end:.1f}s] {window.text}"
         for index, window in enumerate(windows, start=1)
     )
+    
+    feedback_section = ""
+    if feedback:
+        prev_chunk = f'\nPrevious rejected narration:\n"{previous_script}"\n' if previous_script else ""
+        feedback_section = f"""
+IMPORTANT: Your previous attempt was REJECTED by the quality guardrail with this feedback:
+"{feedback}"{prev_chunk}
+Please correct these issues in your new response.
+"""
+
+    example_cite = citation_text(language, source_name)
+    length_rule = script_length_guideline(language)
+
     return f"""You are a short-form video scriptwriter for social media.
 Source: "{source_title}", aired by {source_name}. The material is copyright-protected.
-
+{feedback_section}
 Below is the full transcript as numbered candidate blocks — they are only
 reference material so you can see every moment in order. Pick the best {max_clips} moments
 for engaging vertical shorts and rewrite ONLY those. You are free to choose any contiguous
@@ -75,8 +102,8 @@ a single numbered block.
 
 MANDATORY RULES (the user may break these — you must not):
 1. ORIGINAL REWRITE: for each picked moment, write ONE narration script in {language} that conveys the SAME facts and data in your own words.
-2. DIFFERENT STRUCTURE: the sentence structure and the order of ideas must be clearly different from the source moment. Do NOT copy verbatim sentences, word order, or phrases.
-3. CITATION: every narration must open with a clear source attribution, in {language}, e.g. "根據 {source_name} 報導".
+2. DIFFERENT STRUCTURE: the sentence structure and the order of ideas must be clearly different from the source moment. Do NOT copy verbatim sentences or word order. Facts, numbers, names, and statistics should be preserved accurately.
+3. CITATION: every narration must open with a clear source attribution in {language}, e.g. "{example_cite}".
 4. CHART DATA: if the chosen moment contains comparable quantitative data (numbers, shares, values over time), extract it into the "chart" field — {{
   "title": "short chart title in {language}",
   "kind": "bar" or "line",
@@ -85,7 +112,7 @@ MANDATORY RULES (the user may break these — you must not):
   "unit": "unit when applicable, otherwise empty string"
 }}. Only include numbers that appear literally (or are certainly derivable) from the source; NEVER invent values. If there is no chart data, chart is null.
 5. SEPARATE CITATION: besides opening the narration with the citation, return the same citation in the "citation" field.
-6. LENGTH: each narration must be between 45 and 110 characters in {language} (roughly 15–30 seconds of speech).
+6. LENGTH: each narration must be {length_rule}.
 7. TIMING: each clip must include "start" and "end" (seconds in the source video) of the moment you rewrote. Prefer round numbers. No two clips may be the same moment.
 
 Reply STRICTLY in JSON, no Markdown:

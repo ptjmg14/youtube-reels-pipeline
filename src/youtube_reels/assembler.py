@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .localization import CardStrings, get_card_strings
 from .media import ffmpeg_executable
 from .models import RenderedScript
 from .paths import FONT_BOLD, FONT_REGULAR
 
 WIDTH, HEIGHT = 1080, 1920
+MARGIN_X = 96
+SAFE_TEXT_WIDTH = 860
 _BG_TOP = "#101736"
 _BG_BOTTOM = "#1B2A5E"
 _CARD = "#0B1026"
@@ -23,16 +27,22 @@ class AssembleError(RuntimeError):
     pass
 
 
-def assemble_short(video_dir: Path, script: RenderedScript, narration_path: Path) -> Path:
+def assemble_short(
+    video_dir: Path,
+    script: RenderedScript,
+    narration_path: Path,
+    language: str | None = None,
+) -> Path:
     """Compose an original 9:16 short: text cards + regenerated chart + TTS audio."""
     video_dir.mkdir(parents=True, exist_ok=True)
     duration = _audio_duration(narration_path)
     durations = _split_durations(duration, script.chart is not None)
     chart_path = _render_script_chart(video_dir, script)
+    cards = get_card_strings(language)
     frames = [
-        _render_title_card(video_dir / "frame1.png", script),
-        _render_content_card(video_dir / "frame2.png", script, chart_path),
-        _render_cta_card(video_dir / "frame3.png", script),
+        _render_title_card(video_dir / "frame1.png", script, cards),
+        _render_content_card(video_dir / "frame2.png", script, chart_path, cards),
+        _render_cta_card(video_dir / "frame3.png", script, cards),
     ]
     video_path = video_dir / f"{script.number:02d}-{_slug(script.title)}.mp4"
     _compose(video_path, frames, narration_path, durations)
@@ -60,26 +70,29 @@ def _render_script_chart(video_dir: Path, script: RenderedScript) -> Path:
     return render_chart(script.chart, chart_path)
 
 
-def _render_title_card(path: Path, script: RenderedScript) -> Path:
+def _render_title_card(path: Path, script: RenderedScript, cards: CardStrings) -> Path:
     image = _background()
     draw = ImageDraw.Draw(image)
     bold = ImageFont.truetype(str(FONT_BOLD), 64)
     regular = ImageFont.truetype(str(FONT_REGULAR), 40)
 
-    _pill(draw, "原創短影音 ｜ 內容已重新改寫", _CHIP, 80, 150, regular)
-    title = _wrap(script.title, bold, 900)
-    y = _draw_block(draw, title, bold, 500, _TEXT)
+    _pill(draw, cards.top_pill, _CHIP, MARGIN_X, 180, regular)
+    title = _wrap(script.title, bold, SAFE_TEXT_WIDTH)
+    y = _draw_block(draw, title, bold, 480, _TEXT, x=MARGIN_X)
 
-    short = _wrap(script.hook, regular, 820)
-    _draw_block(draw, short, regular, y + 120, _SUBTEXT)
+    short = _wrap(script.hook, regular, SAFE_TEXT_WIDTH)
+    _draw_block(draw, short, regular, y + 80, _SUBTEXT, x=MARGIN_X)
     cite = ImageFont.truetype(str(FONT_REGULAR), 38)
-    draw.text((96, HEIGHT - 260), "資料來源：", font=cite, fill=_SUBTEXT)
-    draw.text((96, HEIGHT - 200), script.citation, font=cite, fill=_ACCENT)
+    # Safe zone: keep citation above bottom media player controls and scrubber
+    draw.text((MARGIN_X, HEIGHT - 380), cards.source_label, font=cite, fill=_SUBTEXT)
+    draw.text((MARGIN_X, HEIGHT - 320), script.citation, font=cite, fill=_ACCENT)
     image.save(path)
     return path
 
 
-def _render_content_card(path: Path, script: RenderedScript, chart_path: Path) -> Path:
+def _render_content_card(
+    path: Path, script: RenderedScript, chart_path: Path, cards: CardStrings
+) -> Path:
     image = _background()
     draw = ImageDraw.Draw(image)
     bold = ImageFont.truetype(str(FONT_BOLD), 74)
@@ -87,36 +100,37 @@ def _render_content_card(path: Path, script: RenderedScript, chart_path: Path) -
 
     if script.chart and chart_path.exists():
         chart = Image.open(chart_path).convert("RGBA")
-        chart_width = 980
+        chart_width = SAFE_TEXT_WIDTH
         chart_height = round(chart.height * chart_width / chart.width)
         chart = chart.resize((chart_width, chart_height), Image.LANCZOS)
-        image.paste(chart, (50, 560), chart)
-        label = f"圖表由資料重新生成：{script.chart.title}"
-        draw.text((96, 440), label, font=regular, fill=_SUBTEXT)
-        y = HEIGHT - 320
+        chart_x = (WIDTH - chart_width) // 2
+        image.paste(chart, (chart_x, 520), chart)
+        label = f"{cards.chart_label_prefix}{script.chart.title}"
+        draw.text((MARGIN_X, 420), label, font=regular, fill=_SUBTEXT)
+        y = HEIGHT - 340
     else:
-        hook = _wrap(script.hook, bold, 900)
-        _draw_block(draw, hook, bold, 420, _TEXT)
-        y = HEIGHT - 240
+        hook = _wrap(script.hook, bold, SAFE_TEXT_WIDTH)
+        _draw_block(draw, hook, bold, 420, _TEXT, x=MARGIN_X)
+        y = HEIGHT - 340
 
-    citations = _wrap(script.citation, regular, 900)
-    _draw_block(draw, citations, regular, y, _SUBTEXT)
+    citations = _wrap(script.citation, regular, SAFE_TEXT_WIDTH)
+    _draw_block(draw, citations, regular, y, _SUBTEXT, x=MARGIN_X)
     image.save(path)
     return path
 
 
-def _render_cta_card(path: Path, script: RenderedScript) -> Path:
+def _render_cta_card(path: Path, script: RenderedScript, cards: CardStrings) -> Path:
     image = _background()
     draw = ImageDraw.Draw(image)
     bold = ImageFont.truetype(str(FONT_BOLD), 96)
     sub = ImageFont.truetype(str(FONT_BOLD), 64)
     regular = ImageFont.truetype(str(FONT_REGULAR), 40)
 
-    _draw_block(draw, _wrap("你怎麼看？", bold, 900), bold, 640, _TEXT)
-    y = _draw_block(draw, _wrap("留言分享你的想法", sub, 900), sub, 960, _ACCENT)
-    citation = _wrap(script.citation, regular, 900)
-    y = _draw_block(draw, citation, regular, y + 160, _SUBTEXT)
-    draw.text((96, HEIGHT - 260), "短片由 AI 自動生成", font=regular, fill=_SUBTEXT)
+    _draw_block(draw, _wrap(cards.cta_question, bold, SAFE_TEXT_WIDTH), bold, 560, _TEXT, x=MARGIN_X)
+    y = _draw_block(draw, _wrap(cards.cta_sub, sub, SAFE_TEXT_WIDTH), sub, 800, _ACCENT, x=MARGIN_X)
+    citation = _wrap(script.citation, regular, SAFE_TEXT_WIDTH)
+    y = _draw_block(draw, citation, regular, y + 140, _SUBTEXT, x=MARGIN_X)
+    draw.text((MARGIN_X, HEIGHT - 340), cards.ai_footer, font=regular, fill=_SUBTEXT)
     image.save(path)
     return path
 
@@ -168,27 +182,77 @@ def _draw_block(
     font: ImageFont.FreeTypeFont,
     y: int,
     color: str,
+    x: int = MARGIN_X,
 ) -> int:
     for line in lines:
-        draw.text((96, y), line, font=font, fill=color)
+        draw.text((x, y), line, font=font, fill=color)
         y += int(font.size * 1.4)
     return y
 
 
 def _wrap(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+    """Wraps text intelligently respecting margins, natural punctuation boundaries,
+    spaces in European languages, and Kinsoku Shori rules in CJK scripts."""
     lines: list[str] = []
+    no_start = set("，、。！？；：!?,;:)）]】}'\"”’»")
+
     for paragraph in text.splitlines():
-        words = paragraph.split()
-        current: list[str] = []
-        for word in words:
-            candidate = " ".join([*current, word])
-            if not current or font.getbbox(candidate)[2] <= max_width:
-                current.append(word)
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+
+        # Split into tokens ending in punctuation or whitespace
+        tokens = re.findall(r"[^，、。！？；：!?,;:\s]+[，、。！？；：!?,;:]*|\s+", paragraph)
+        if not tokens:
+            tokens = [paragraph]
+
+        units: list[str] = []
+        for token in tokens:
+            if not token.strip():
+                continue
+            if font.getbbox(token)[2] > max_width:
+                units.extend(list(token))
             else:
-                lines.append(" ".join(current))
-                current = [word]
-        lines.append(" ".join(current))
-    return [line for line in lines if line] or [text]
+                units.append(token)
+
+        current = ""
+        for unit in units:
+            sep = (
+                " "
+                if (
+                    " " in paragraph
+                    and current
+                    and not current.endswith(
+                        (" ", "，", "、", "。", "！", "？", "；", "：", "-", "—")
+                    )
+                )
+                else ""
+            )
+            candidate = f"{current}{sep}{unit}" if current else unit
+            if font.getbbox(candidate)[2] <= max_width:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = unit
+        if current:
+            lines.append(current)
+
+    # Kinsoku Shori post-processing: avoid starting any line with closing punctuation
+    refined: list[str] = []
+    for line in lines:
+        if refined and line and line[0] in no_start:
+            punct = ""
+            while line and line[0] in no_start:
+                punct += line[0]
+                line = line[1:].lstrip()
+            refined[-1] += punct
+            if line:
+                refined.append(line)
+        else:
+            refined.append(line)
+
+    return refined or [text]
 
 
 def _compose(
@@ -222,9 +286,9 @@ def _compose(
         "-c:v",
         "libx264",
         "-preset",
-        "medium",
+        "veryfast",
         "-crf",
-        "20",
+        "23",
         "-pix_fmt",
         "yuv420p",
         "-c:a",

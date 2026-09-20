@@ -33,7 +33,10 @@ YouTube URL
 | **Video** | FFmpeg (card-composition + audio muxing) | No original video footage used — ensures 100% original content |
 | **Index** | Pinecone (server-side embeddings `multilingual-e5-large`) + local Chroma/ONNX mirror | Deduplication by ID and textual similarity (semantic recall + n-gram Jaccard); local backup works offline or if Pinecone is unreachable |
 
-Detailed breakdown and cost estimates: **[COSTS.md](COSTS.md)**.
+Detailed analysis documents:
+- 📊 **[COSTS.md](COSTS.md)** — Numerical cost estimates per video, scale projections, and cost-comparison tables.
+- 💡 **[RATIONALE.md](RATIONALE.md)** — Detailed answers to assessment questions, trade-offs, and design rationale.
+- 🚀 **[INSTALLATION.md](INSTALLATION.md)** — Step-by-step setup guide with tested commands for Windows, macOS, and Linux.
 
 ## Requirements
 
@@ -75,7 +78,7 @@ Key environment variables (all optional except the key):
 | --- | --- | --- |
 | `GEMINI_API_KEY` | — | Required for rewrite + guardrail (free tier) |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Rewriter & Evaluator model |
-| `REELS_SOURCE_NAME` | `HEALTH 2.0` | Source name used in citations |
+| `REELS_SOURCE_NAME` | auto (YouTube channel) | Manual override for the source name in citations; unset derives it from each video's channel |
 | `REELS_OUTPUT_LANG` | `繁體中文` | Language for script and narration |
 | `REELS_TTS_VOICE` | `zh-TW-HsiaoYuNeural` | edge-tts voice |
 | `REELS_EMBEDDING` | `local` | `local` (ONNX, $0) or `gemini` (Gemini embeddings API) |
@@ -133,7 +136,7 @@ If a video overlaps ≥ `REELS_DEDUPE_THRESHOLD` with an indexed transcript, pro
 ## Copyright Compliance Policy
 
 - **Mandatory Rewrite**: Sentence structure and wording are completely rewritten. Original narration is never copied verbatim.
-- **Source Citation**: Each script begins with a clear credit ("According to HEALTH 2.0 reporting...").
+- **Source Citation**: Each script begins with a clear credit to the actual source channel ("According to <channel>'s reporting..."), resolved automatically from the video metadata (`REELS_SOURCE_NAME` overrides it when set).
 - **Regenerated Charts**: Charts are programmatically plotted from scratch (using `matplotlib`) from data tables. No screenshots are taken.
 - **Zero Footage Muxing**: The generated video does not reuse the original source's video or audio streams, producing 100% original creative content.
 

@@ -69,7 +69,7 @@ It is not necessary to install FFmpeg globally: `imageio-ffmpeg` provides a port
 | `GEMINI_API_KEY` | — | Required for rewrite + guardrail (mandatory) |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Model for rewrite/evaluator |
 | `GROQ_API_KEY` | — | Fast transcription if present |
-| `REELS_SOURCE_NAME` | `HEALTH 2.0` | Name of the source for mandatory citation |
+| `REELS_SOURCE_NAME` | auto (YouTube channel) | Manual override for the mandatory citation source; unset auto-detects from the video's channel |
 | `REELS_OUTPUT_LANG` | `繁體中文` | Script/narration language |
 | `REELS_TTS_VOICE` | `zh-TW-HsiaoYuNeural` | edge-tts voice |
 | `REELS_VECTORDB` | `pinecone` | Primary DB (`pinecone` or `chroma`) |

@@ -40,7 +40,7 @@ flowchart TD
     subgraph GW [Selection + rewrite · ~5s · mandatory · free tier]
         W1[Prompt: pick the N best moments<br/>with free start/end (cross-window)<br/>rewrite structure and wording<br/>citation + chart data in JSON<br/>numbers anti-hallucination]
         W1 --> W2[genai → RenderedScripts<br/>narration + citation + chart_spec + start/end + source_text]
-        W2 --> W3[missing citation → fallback<br/>According to HEALTH 2.0 reporting]
+        W2 --> W3[missing citation → fallback<br/>According to &lt;channel&gt; reporting]
     end
 
     W3 --> J[analysis.json<br/>transcript + scripts + citations]
