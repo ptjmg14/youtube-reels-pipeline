@@ -8,7 +8,13 @@ from google.genai import Client, errors, types
 logger = logging.getLogger(__name__)
 
 # List of models by capacity/stability (current 2026 lineup)
-MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-3.6-flash", "gemini-flash-latest"]
+MODEL_FALLBACKS = [
+    "gemini-2.5-flash",
+    "gemini-3.6-flash",
+    "gemini-flash-latest",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash"
+]
 
 RETRY_ROUNDS = 3
 RETRY_SLEEP_S = 20

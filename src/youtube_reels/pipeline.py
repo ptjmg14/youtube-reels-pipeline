@@ -217,7 +217,7 @@ def _evaluate(
                     continue
 
             try:
-                evaluator.evaluate(current_script)
+                evaluator.evaluate(current_script, effective_source)
                 success = True
                 logger.info(f"Script {script.number} passed guardrail evaluation on attempt {attempt}.")
                 break

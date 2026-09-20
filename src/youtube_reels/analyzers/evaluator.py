@@ -21,11 +21,11 @@ class Evaluator:
         self.model = model
         self.language = language
 
-    def evaluate(self, script: RenderedScript) -> bool:
+    def evaluate(self, script: RenderedScript, source_name: str) -> bool:
         """Evaluates a script. Returns True if passed, raises EvalError if failed."""
         from ..llm_utils import generate_with_fallback
 
-        prompt = self._eval_prompt(script)
+        prompt = self._eval_prompt(script, source_name)
 
         try:
             response_text = generate_with_fallback(
@@ -42,15 +42,18 @@ class Evaluator:
         reason = result.get("reason") or "Quality evaluation failed"
         raise EvalError(f"Evaluation failed: {reason}")
 
-    def _eval_prompt(self, script: RenderedScript) -> str:
+    def _eval_prompt(self, script: RenderedScript, source_name: str) -> str:
         chart_str = json.dumps(script.chart.to_dict()) if script.chart else "None"
         return f"""You are a content quality and legal compliance evaluator for a media company.
 Target Language: {self.language}
 
 Evaluate the following script based on these rules:
 1. PARAPHRASE: The narration must NOT copy the original source text verbatim. It must explain the information with original sentence structure and phrasing. Specific facts, proper names, entities, numbers, percentages, and dates SHOULD be accurately preserved.
-2. CITATION: The narration MUST begin with a clear attribution/credit to the source (e.g., in {self.language}).
+2. CITATION: The narration MUST begin with a clear attribution/credit to the Official Source Name provided below.
 3. CHART DATA: If the script includes a chart, ensure its categories and numbers are factually grounded in the Original Source Text (not invented). The narration itself is brief and is NOT required to recite every single data point from the chart.
+
+Official Source Name:
+"{source_name}"
 
 Original Source Text:
 "{script.source_text}"
