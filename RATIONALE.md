@@ -39,6 +39,7 @@ The source material is protected news/media content. The pipeline strictly compl
 2. **Source Attribution**: Every clip begins with an explicit verbal and visual citation (e.g., *"According to [Channel]'s reporting..."* or *"Segundo apurado por [Canal]..."*), dynamically resolved from the video channel metadata.
 3. **Programmatic Chart Regeneration**: When numerical or statistical data is present, data points are extracted into structured JSON and plotted from scratch using `matplotlib`. Screenshots or clips of original footage are never used.
 4. **Zero Footage Muxing**: No original video frames or audio streams are included in the output shorts.
+5. **Future Guardrail Optimization with Jev (Typesafe AI)**: A future possibility for a cheaper, reliable guardrail is investigating Jev to enforce rigid, programmatic assertions. The core architectural decision will be determining the threshold of trust: identifying which journalistic constraints require the semantic understanding of an LLM evaluator, and which can be safely offloaded to Jev's strict, zero-shot structural rules.
 
 ---
 
